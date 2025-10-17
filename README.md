@@ -1,0 +1,35 @@
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# autoMLR: Your Automated Machine Learning Assistant
+
+`autoMLR` is an R package designed to streamline the process of machine
+learning model tuning. It provides a robust, configuration-driven
+workflow to automatically select, tune, and train models, inspired by
+best practices in data science.
+
+## Core Features
+
+- **Model-Agnostic Workflow**: Easily switch between a curated list of
+  powerful machine learning models by changing a single variable.
+- **Automated Hyperparameter Tuning**: Leverages `mlr3` for robust,
+  automated tuning using random search and cross-validation.
+- **Reproducible Science**: From setting seeds to generating final
+  reports, every step is designed for reproducibility.
+- **Insightful Visualizations**: Automatically generate plots to
+  understand hyperparameter importance and performance.
+
+## Installation
+
+You can install the development version of `autoMLR` from GitHub with:
+
+``` r
+# install.packages("devtools")
+devtools::install_github("caosmart1979cao/autoMLR")
+```
+
+## Quick Start
+
+Check out the “Getting Started” guide to see a full end-to-end example:
+
+`vignette("getting-started", package = "autoMLR")`
