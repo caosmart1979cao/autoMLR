@@ -12,3 +12,107 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
+```
+
+## Introduction
+
+Welcome to `autoMLR`! This guide will walk you through a complete, end-to-end workflow for automated machine learning model tuning. We will go from selecting a model to training a final, optimized version and generating a report.
+
+First, let's load all of our package's functions.
+```{r setup}
+# During development, this command loads all functions from the R/ directory,
+# just as if the package were installed and loaded with library(autoMLR).
+if (require("devtools", quietly = TRUE)) {
+  devtools::load_all()
+}
+```
+
+## Step 1: The Model Registry (Central Console)
+
+Our journey begins at the central console, where we can see all available models.
+```{r registry}
+# Load the registry
+registry <- load_model_registry()
+
+# List all available models
+list_available_models(registry)
+
+# Let's choose the Decision Tree ("DT") for this example
+model_code <- "DT"
+dt_config <- get_model_config(registry, model_code)
+```
+
+## Step 2: The Learner Factory
+
+With a configuration in hand, we can now "manufacture" our learner and define its hyperparameter search space.
+```{r factory}
+dt_learner <- create_learner(dt_config)
+dt_space <- define_search_space(dt_config)
+
+print(dt_learner)
+print(dt_space)
+```
+
+## Step 3: The Tuning Engine
+
+This is the core of our package. We provide the engine with a task, our learner, and the search space, and it finds the best parameters for us. We'll use the `mlr3` built-in `pima` dataset for this demonstration.
+```{r tuning}
+# Ensure necessary packages are available
+if (!require("mlr3learners", quietly = TRUE)) install.packages("mlr3learners")
+if (!require("mlr3tuning", quietly = TRUE)) install.packages("mlr3tuning")
+if (!require("mlr3data", quietly = TRUE)) install.packages("mlr3data")
+
+
+# Load the task
+task <- mlr3::tsk("pima")
+
+# Set a seed for reproducibility
+set.seed(2025) 
+
+# Run a small-scale tuning for demonstration
+tuning_instance <- run_hyperparameter_tuning(
+  task = task,
+  learner = dt_learner,
+  search_space = dt_space,
+  n_evals = 10, # 10 evaluations
+  cv_folds = 3  # 3-fold cross-validation
+)
+
+# Show the best result found
+print(tuning_instance$result)
+```
+
+## Step 4: The Insight Hub
+
+The engine has finished its work. Now, let's analyze and visualize the results to understand what happened.
+```{r insights}
+# Summarize the results
+tuning_summary <- summarize_tuning_results(tuning_instance)
+
+# Print the best AUC score
+cat("Best AUC found:", round(tuning_summary$best_performance[[1]], 4), "\n")
+
+# Visualize the relationship between parameters and performance
+# This plot will appear in the output
+plot_tuning_summary(tuning_instance, type = "parameter")
+```
+
+## Step 5: Final Delivery
+
+Finally, we use the best hyperparameters to train a final model on the entire dataset and generate a complete report.
+```{r finalization}
+# Create an output directory
+output_dir <- tempfile() # Use a temporary directory for this example
+
+# Train the final model
+final_model <- train_final_model(dt_learner, task, tuning_summary$best_params)
+print(final_model)
+
+# Generate the report and save artifacts
+generate_training_report(dt_config, tuning_summary, output_dir)
+save_final_artifacts(final_model, tuning_instance, output_dir, model_code)
+
+# We can see the files that were created
+list.files(output_dir)
+```
+This concludes our quick start guide. You have successfully tuned a model and produced all the necessary outputs for a reproducible machine learning project!
