@@ -1,0 +1,11 @@
+Code,FullName,LearnerID,Category,Description,Tunable
+DT,"Decision Tree",classif.rpart,Tree-based,"CART decision tree",TRUE
+RF,"Random Forest",classif.ranger,Ensemble,"Random Forest from ranger package",TRUE
+XGB,"XGBoost",classif.xgboost,Boosting,"Extreme Gradient Boosting",TRUE
+SVM,"Support Vector Machine",classif.svm,SVM,"Support Vector Machine from e1071",TRUE
+GLMNET,"Elastic Net",classif.glmnet,Regularized,"Elastic Net Regularization",TRUE
+LR,"Logistic Regression",classif.log_reg,Linear,"Logistic Regression",FALSE
+LGBM,"LightGBM",classif.lightgbm,Boosting,"Light Gradient Boosting Machine",TRUE
+LASSO,"Lasso Regression",classif.glmnet,Regularized,"L1 Regularization",TRUE
+RIDGE,"Ridge Regression",classif.glmnet,Regularized,"L2 Regularization",TRUE
+GAMBOOST,"GAM Boosting",classif.gamboost,Boosting,"Boosting with GAMs",TRUE

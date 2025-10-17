@@ -1,0 +1,28 @@
+=========================================
+      Model Training Summary Report      
+=========================================
+
+Model Name: Decision Tree ( DT )
+Learner ID: classif.rpart 
+Description: CART decision tree 
+
+--- Hyperparameter Tuning ---
+Metric: AUC 
+Search Method: Random Search 
+
+--- Best Performance ---
+AUC: 0.7647 
+
+--- Best Hyperparameters ---
+$xval
+[1] 0
+
+$cp
+[1] 0.008397928
+
+$maxdepth
+[1] 9
+
+$minbucket
+[1] 3
+
