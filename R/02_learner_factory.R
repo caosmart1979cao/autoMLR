@@ -22,7 +22,7 @@ define_search_space <- function(config) {
   if (!is.null(config$Tunable) && config$Tunable == FALSE) {
     stop(paste0("Model '", config$Code, "' (", config$FullName, ") is not configured for tuning in this package version."))
   }
-  
+
   switch(config$Code,
          "DT" = paradox::ps(
            cp = paradox::p_dbl(lower = 0.001, upper = 0.1),
@@ -68,4 +68,22 @@ define_search_space <- function(config) {
          # Default case for models that are Tunable but not yet implemented
          stop(paste0("Search space for model '", config$Code, "' is defined as Tunable but a space has not been implemented yet."))
   )
+}
+#' Creates a list of mlr3 learners
+#'
+#' Takes a list of model configurations and returns a list of corresponding
+#' mlr3 learner objects.
+#'
+#' @param configs A list of configuration lists from \code{get_model_config()}.
+#' @return A list of mlr3 \code{Learner} objects.
+#' @export
+create_multiple_learners <- function(configs) {
+  # Use lapply to apply the create_learner function to each config in the list
+  learners <- lapply(configs, create_learner)
+
+  # Set the ID for each learner to be its short code for easy identification
+  learner_codes <- sapply(configs, function(c) c$Code)
+  names(learners) <- learner_codes
+
+  return(learners)
 }
