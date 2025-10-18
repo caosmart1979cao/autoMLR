@@ -20,9 +20,12 @@ create_learner <- function(config) {
   return(learner)
 }
 
-#' Defines a hyperparameter search space
+#' Defines a hyperparameter search space with pipeline-aware naming
 #'
 #' Returns a pre-defined hyperparameter search space for a given model configuration.
+#' It automatically prefixes parameter names with the learner's ID to make them
+#' compatible with GraphLearners (pipelines). If no search space is defined for a
+#' model, it returns an empty ParamSet and issues a warning.
 #'
 #' @param config A list containing model configuration.
 #' @return A \code{paradox::ParamSet} object representing the search space.
@@ -30,62 +33,66 @@ create_learner <- function(config) {
 define_search_space <- function(config) {
   # First, check if the model is marked as tunable in the registry.
   if (!is.null(config$Tunable) && config$Tunable == FALSE) {
-    stop(paste0("Model '", config$Code, "' (", config$FullName, ") is not configured for tuning in this package version."))
+    # Return an empty search space for non-tunable models.
+    return(paradox::ps())
   }
 
-  switch(config$Code,
-         "DT" = paradox::ps(
-           cp = paradox::p_dbl(lower = 0.001, upper = 0.1),
-           maxdepth = paradox::p_int(lower = 2, upper = 10),
-           minbucket = paradox::p_int(lower = 2, upper = 15)
-         ),
-         "RF" = paradox::ps(
-           mtry.ratio = paradox::p_dbl(lower = 0.1, upper = 0.9),
-           num.trees = paradox::p_int(lower = 50, upper = 500)
-         ),
-         "XGB" = paradox::ps(
-           eta = paradox::p_dbl(lower = 0.01, upper = 0.3),
-           nrounds = paradox::p_int(lower = 50, upper = 250),
-           max_depth = paradox::p_int(lower = 2, upper = 8)
-         ),
-         "SVM" = paradox::ps(
-           cost = paradox::p_dbl(lower = 0.01, upper = 10),
-           gamma = paradox::p_dbl(lower = 0.001, upper = 1),
-           kernel = paradox::p_fct(c("radial", "polynomial", "sigmoid"))
-         ),
-         "GLMNET" = paradox::ps(
-           alpha = paradox::p_dbl(lower = 0, upper = 1), # 0=Ridge, 1=Lasso
-           s = paradox::p_dbl(lower = 0.001, upper = 0.1)  # Lambda
-         ),
-         "LGBM" = paradox::ps(
-           learning_rate = paradox::p_dbl(lower = 0.01, upper = 0.3),
-           num_iterations = paradox::p_int(lower = 50, upper = 250),
-           max_depth = paradox::p_int(lower = 2, upper = 8),
-           num_leaves = paradox::p_int(lower = 10, upper = 40)
-         ),
-         "CPH" = paradox::ps(
-           # Example for a survival model, can be expanded
-           # Note: CoxPH in 'survival' package doesn't have many hyperparameters to tune via mlr3
-           # This is a placeholder for potentially more complex survival learners
-         ),
-         "SURV_RF" = paradox::ps(
-           mtry.ratio = paradox::p_dbl(lower = 0.1, upper = 0.9),
-           num.trees = paradox::p_int(lower = 50, upper = 500),
-           min.node.size = paradox::p_int(lower = 1, upper = 10)
-         ),
-         "GBM" = paradox::ps(
-           n.trees = paradox::p_int(lower = 50, upper = 500),
-           interaction.depth = paradox::p_int(lower = 1, upper = 5),
-           shrinkage = paradox::p_dbl(lower = 0.001, upper = 0.1)
-         ),
-         "NNET" = paradox::ps(
-           size = paradox::p_int(lower = 1, upper = 10),
-           decay = paradox::p_dbl(lower = 1e-4, upper = 0.1)
-         ),
-         # Default case for models that are Tunable but not yet implemented
-         stop(paste0("Search space for model '", config$Code, "' is defined as Tunable but a space has not been implemented yet."))
+  learner_id <- config$LearnerID
+
+  # Use a list to construct parameters dynamically
+  params <- switch(config$Code,
+                   "DT" = list(
+                     paradox::p_dbl(lower = 0.001, upper = 0.1),
+                     paradox::p_int(lower = 2, upper = 10),
+                     paradox::p_int(lower = 2, upper = 15)
+                   ),
+                   "RF" = list(
+                     paradox::p_dbl(lower = 0.1, upper = 0.9),
+                     paradox::p_int(lower = 50, upper = 500)
+                   ),
+                   "XGB" = list(
+                     paradox::p_dbl(lower = 0.01, upper = 0.3),
+                     paradox::p_int(lower = 50, upper = 250),
+                     paradox::p_int(lower = 2, upper = 8)
+                   ),
+                   "SVM" = list(
+                     paradox::p_dbl(lower = 0.01, upper = 10),
+                     paradox::p_dbl(lower = 0.001, upper = 1),
+                     paradox::p_fct(c("radial", "polynomial", "sigmoid"))
+                   ),
+                   # Add other tunable models here...
+
+                   # DEFAULT CASE: If a model is marked as Tunable but no space is defined,
+                   # return an empty set and warn the user.
+                   {
+                     warning(paste0("Search space for model '", config$Code, "' is not implemented. It will not be tuned."))
+                     list() # Return an empty list
+                   }
   )
+
+  # If the params list is empty, return an empty ParamSet
+  if (length(params) == 0) {
+    return(paradox::ps())
+  }
+
+  # Dynamically assign names based on the learner ID
+  param_names <- switch(config$Code,
+                        "DT" = c("cp", "maxdepth", "minbucket"),
+                        "RF" = c("mtry.ratio", "num.trees"),
+                        "XGB" = c("eta", "nrounds", "max_depth"),
+                        "SVM" = c("cost", "gamma", "kernel"),
+                        # Add other tunable models here...
+                        NULL
+  )
+
+  if (!is.null(param_names)) {
+    names(params) <- paste0(learner_id, ".", param_names)
+  }
+
+  # Construct the final ParamSet
+  return(do.call(paradox::ps, params))
 }
+
 
 #' Creates a list of mlr3 learners
 #'
@@ -96,12 +103,9 @@ define_search_space <- function(config) {
 #' @return A list of mlr3 \code{Learner} objects.
 #' @export
 create_multiple_learners <- function(configs) {
-  # Use lapply to apply the create_learner function to each config in the list
   learners <- lapply(configs, create_learner)
-
-  # Set the ID for each learner to be its short code for easy identification
   learner_codes <- sapply(configs, function(c) c$Code)
   names(learners) <- learner_codes
-
   return(learners)
 }
+

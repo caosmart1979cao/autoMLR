@@ -1,105 +1,103 @@
-#' Run a benchmark comparison of multiple models, with automated tuning.
+#' Run a multi-model benchmark with nested resampling
 #'
-#' This function orchestrates a complete benchmark workflow. For each specified model,
-#' it automatically wraps it in an AutoTuner if it's marked as tunable, then
-#' runs a benchmark comparison across all models on a given resampling strategy.
+#' This function orchestrates a full benchmark comparison of multiple learners.
+#' For each learner, it automatically wraps it in an AutoTuner to perform
+#' hyperparameter tuning using an "inner" cross-validation loop. Then, it
+#' evaluates the performance of these self-tuning learners on an "outer"
+#' cross-validation loop to get an unbiased performance estimate.
 #'
-#' @param task The \code{mlr3} task object (e.g., TaskClassif, TaskRegr, TaskSurv).
-#' @param model_codes A character vector of model codes from the registry to compare.
-#' @param registry The model registry \code{data.frame}.
-#' @param n_evals The number of tuning evaluations for each tunable model.
-#' @param inner_cv_folds The number of CV folds for the inner hyperparameter tuning loop.
-#' @param outer_resampling The \code{mlr3} resampling strategy for the final outer
-#'   benchmark comparison (e.g., \code{rsmp("cv", folds = 3)}).
-#' @return An \code{mlr3::BenchmarkResult} object containing the performance of all models.
+#' @param task The \code{mlr3} task.
+#' @param learners A **named** list of \code{mlr3} learners to benchmark, where names are model codes (e.g., 'DT').
+#' @param n_evals The number of tuning evaluations for the inner loop (per learner).
+#' @param outer_cv_folds The number of folds for the outer resampling loop.
+#' @return A \code{mlr3::BenchmarkResult} object.
 #' @export
-run_model_benchmark <- function(task, model_codes, registry, n_evals = 20, inner_cv_folds = 5, outer_resampling) {
+run_model_benchmark <- function(task, learners, n_evals = 15, outer_cv_folds = 3) {
 
-  learners_to_benchmark <- list()
+  if (!requireNamespace("mlr3tuning", quietly = TRUE)) {
+    stop("Package 'mlr3tuning' is required for benchmarking with nested resampling.")
+  }
 
-  for (code in model_codes) {
-    config <- get_model_config(registry, code)
-    base_learner <- create_learner(config)
+  # A critical check to ensure the learners list is correctly named.
+  if (is.null(names(learners)) || any(names(learners) == "")) {
+    stop("'learners' must be a named list, where names are the model codes (e.g., 'DT', 'RF').")
+  }
 
-    # Check if the model is tunable according to the registry
-    if (!is.null(config$Tunable) && config$Tunable == TRUE) {
-      message(paste0("Configuring AutoTuner for '", code, "'..."))
+  # Ensure the registry is loaded to get configs
+  registry <- load_model_registry()
 
-      # This is a tunable model, wrap it in an AutoTuner for nested resampling
-      search_space <- define_search_space(config)
-      terminator <- mlr3tuning::trm("evals", n_evals = n_evals)
-      tuner <- mlr3tuning::tnr("random_search")
-      inner_resampling <- mlr3::rsmp("cv", folds = inner_cv_folds)
+  # 1. Create a list of AutoTuners, one for each learner, iterating over the NAMES.
+  auto_tuners <- lapply(names(learners), function(model_code) {
 
-      # Dynamically select the measure based on task type
-      measure <- switch(task$task_type,
-                        "classif" = mlr3::msr("classif.auc"),
-                        "regr"    = mlr3::msr("regr.rmse"),
-                        "surv"    = mlr3::msr("surv.cindex"),
-                        stop("Unsupported task type for benchmark measure selection.")
-      )
+    learner <- learners[[model_code]]
+    config <- get_model_config(registry, model_code)
 
-      # Create the AutoTuner
-      auto_tuner <- mlr3tuning::AutoTuner$new(
-        learner = base_learner,
-        resampling = inner_resampling,
-        measure = measure,
-        search_space = search_space,
-        terminator = terminator,
-        tuner = tuner
-      )
-      auto_tuner$id <- code # Set a clean ID for the benchmark results
-      learners_to_benchmark[[code]] <- auto_tuner
-
-    } else {
-      # This is a non-tunable model, use it directly
-      message(paste0("Adding non-tunable model '", code, "' to benchmark."))
-      base_learner$id <- code
-      learners_to_benchmark[[code]] <- base_learner
+    # Do not try to tune models marked as not tunable
+    if (is.null(config$Tunable) || config$Tunable == FALSE) {
+      return(learner) # Return the base learner directly
     }
-  }
 
-  # Ensure there are learners to benchmark
-  if (length(learners_to_benchmark) == 0) {
-    stop("No valid learners were configured for the benchmark.")
-  }
+    search_space <- define_search_space(config)
 
-  # Create the benchmark design
+    # If the search space is empty, don't wrap in an AutoTuner
+    if (search_space$length == 0) {
+      warning(paste("Search space for", model_code, "is empty. Skipping tuning."))
+      return(learner)
+    }
+
+    inner_resampling <- mlr3::rsmp("cv", folds = 3)
+    terminator <- mlr3tuning::trm("evals", n_evals = n_evals)
+    tuner <- mlr3tuning::tnr("random_search")
+
+    # Create the AutoTuner for this learner
+    at <- mlr3tuning::AutoTuner$new(
+      learner = learner,
+      resampling = inner_resampling,
+      measure = mlr3::msr("classif.auc"), # This could be made dynamic in a future version
+      search_space = search_space,
+      terminator = terminator,
+      tuner = tuner,
+      # Store the inner tuning instance for later retrieval in reports
+      store_tuning_instance = TRUE
+    )
+
+    # The AutoTuner's ID is what will appear in the benchmark results
+    at$id <- paste0(model_code, "_tuned")
+    return(at)
+  })
+
+  # 2. Define the outer resampling strategy
+  outer_resampling <- mlr3::rsmp("cv", folds = outer_cv_folds)
+
+  # 3. Create the benchmark design
   design <- mlr3::benchmark_grid(
-    tasks = task,
-    learners = learners_to_benchmark,
-    resamplings = outer_resampling
+    task = task,
+    learner = auto_tuners,
+    resampling = outer_resampling
   )
 
-  message(paste0("\n--- Starting benchmark of ", length(learners_to_benchmark), " model(s) ---"))
-  # Set store_models = TRUE to inspect models later if needed
-  bmr <- mlr3::benchmark(design, store_models = TRUE)
+  # 4. Run the benchmark
+  message("Starting benchmark with nested resampling. This may take a while...")
+  # CRITICAL FIX: store_backends = TRUE is essential for caching in vignettes
+  benchmark_result <- mlr3::benchmark(design, store_models = TRUE, store_backends = TRUE)
 
-  message("✔ Benchmark finished.")
-  return(bmr)
+  return(benchmark_result)
 }
 
-#' Visualize benchmark results
+#' Plot benchmark summary
 #'
-#' Creates a boxplot comparing the performance of different learners from a
-#' benchmark result.
+#' Generates a bar plot comparing the performance of learners from a benchmark result.
 #'
-#' @param bmr The \code{BenchmarkResult} object from \code{run_model_benchmark}.
-#' @param measure An optional \code{mlr3::Measure} to plot. If NULL, plots the primary
-#'   measure from the benchmark result.
-#' @return A \code{ggplot2} object.
+#' @param benchmark_result The \code{mlr3::BenchmarkResult} object.
+#' @return A ggplot object.
 #' @export
-plot_benchmark_summary <- function(bmr, measure = NULL) {
+plot_benchmark_summary <- function(benchmark_result) {
   if (!requireNamespace("mlr3viz", quietly = TRUE)) {
-    stop("Package 'mlr3viz' is required for plotting. Please install it.")
+    stop("Package 'mlr3viz' is required for this visualization.")
   }
 
-  mlr3viz::autoplot(bmr, measure = measure) +
-    ggplot2::theme_minimal(base_size = 14) +
-    ggplot2::labs(
-      title = "Model Benchmark Comparison",
-      subtitle = "Performance across resampling folds"
-    ) +
-    # Improve axis labels for better readability
-    ggplot2::scale_x_discrete(guide = ggplot2::guide_axis(angle = 45))
+  mlr3viz::autoplot(benchmark_result) +
+    ggplot2::ggtitle("Model Benchmark Comparison") +
+    ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
 }
+

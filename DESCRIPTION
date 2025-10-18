@@ -1,33 +1,28 @@
 Package: autoMLR
 Title: Automated Machine Learning Assistant
-Version: 2.0.0
+Version: 2.8.0
 Authors@R: 
     person(given = "Your Name",
            email = "your.email@example.com",
            role = c("aut", "cre"))
-Description: Streamlines the process of machine learning model tuning and comparison. 
-    Provides a robust, configuration-driven workflow to automatically select, tune, 
-    train, interpret, and benchmark models for classification, regression, and 
-    survival analysis using the 'mlr3' ecosystem.
+Description: Streamlines the process of machine learning model tuning. 
+    Provides a robust, configuration-driven workflow to automatically select, 
+    tune, and train models using the 'mlr3' ecosystem.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
+RoxygenNote: 7.3.1
 Imports:
     mlr3,
     mlr3learners,
     mlr3tuning,
     mlr3viz,
-    mlr3proba,
+    mlr3pipelines,
     paradox,
     data.table,
     ggplot2,
-    e1071,
-    glmnet,
-    mboost,
-    lightgbm,
-    ranger,
-    xgboost,
+    rlang,
+    mlr3proba,
     shapviz,
     kernelshap,
     rmarkdown
@@ -36,3 +31,4 @@ Suggests:
     testthat (>= 3.0.0),
     knitr
 Config/testthat/edition: 3
+
