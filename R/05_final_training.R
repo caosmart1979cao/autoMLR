@@ -8,43 +8,174 @@
 #' @return The trained final learner object.
 #' @export
 train_final_model <- function(learner, task, best_params) {
-  # ... (The rest of the function code remains the same as before)
-  learner$param_set$values <- best_params
+  # Ensure best_params is not NULL or empty
+  if (!is.null(best_params) && length(best_params) > 0) {
+    # Use modifyList to safely update parameters, keeping defaults for non-tuned ones
+    learner$param_set$values <- utils::modifyList(learner$param_set$values, best_params)
+  }
   learner$train(task)
   return(learner)
 }
 
-#' Generate a training report
+#' Generate a rich, dynamic HTML training report
 #'
-#' Creates a text file summarizing the entire training and tuning process.
+#' Creates a comprehensive HTML file summarizing the entire training and tuning process,
+#' including performance metrics and SHAP model interpretation plots.
 #'
 #' @param config The model configuration list.
-#' @param tuning_summary The summary list from \code{summarize_tuning_results()}.
+#' @param tuning_instance The finished tuning instance.
+#' @param final_learner The final trained learner.
+#' @param task The mlr3 task.
+#' @param test_data A \code{data.frame} of the test set (features only), required for SHAP plots.
 #' @param output_dir The directory to save the report in.
-#' @return Invisibly returns NULL. Called for its side effect of writing a file.
+#' @return Invisibly returns the path to the generated report.
 #' @export
-generate_training_report <- function(config, tuning_summary, output_dir) {
-  # ... (The rest of the function code remains the same as before)
+generate_training_report <- function(config, tuning_instance, final_learner, task, test_data, output_dir) {
+  if (!requireNamespace("rmarkdown", quietly = TRUE)) {
+    stop("Package 'rmarkdown' is required to generate HTML reports. Please install it.")
+  }
+
+  # Ensure output directory exists
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
-  report_path <- file.path(output_dir, paste0(config$Code, "_training_report.txt"))
-  sink(report_path)
-  cat("=========================================\n")
-  cat("      Model Training Summary Report      \n")
-  cat("=========================================\n\n")
-  cat("Model Name:", config$FullName, "(", config$Code, ")\n")
-  cat("Learner ID:", config$LearnerID, "\n")
-  cat("Description:", config$Description, "\n\n")
-  cat("--- Hyperparameter Tuning ---\n")
-  cat("Metric:", "AUC", "\n")
-  cat("Search Method:", "Random Search", "\n\n")
-  cat("--- Best Performance ---\n")
-  cat("AUC:", round(tuning_summary$best_performance[[1]], 4), "\n\n")
-  cat("--- Best Hyperparameters ---\n")
-  print(tuning_summary$best_params)
-  sink()
-  message("Training report saved to: ", normalizePath(report_path))
+
+  # Define file paths
+  report_path_rmd <- file.path(tempdir(), paste0(config$Code, "_training_report.Rmd"))
+  report_path_html <- file.path(output_dir, paste0(config$Code, "_training_report.html"))
+
+  # Summarize results
+  tuning_summary <- summarize_tuning_results(tuning_instance)
+
+  # Generate SHAP plots
+  message("Generating SHAP plots for the final model...")
+  shap_plots <- tryCatch({
+    # Ensure test_data does not contain the target variable for SHAP
+    test_features <- if(inherits(test_data, "data.table")) test_data[, task$feature_names, with = FALSE] else test_data[, task$feature_names]
+    generate_shap_plots(final_learner, task, test_features)
+  }, error = function(e) {
+    warning("Could not generate SHAP plots: ", e$message)
+    return(NULL)
+  })
+
+  # --- Create the RMarkdown Content ---
+  rmd_content <- paste0("
+---
+title: 'autoMLR Training Report: ", config$FullName, " (", config$Code, ")'
+output:
+  html_document:
+    theme: journal
+    toc: true
+    toc_float: true
+---
+
+<style>
+  body { font-family: sans-serif; }
+  .main-container { max-width: 1200px; margin: auto; }
+</style>
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(ggplot2)
+library(mlr3viz)
+library(shapviz)
+```
+
+# 1. Model & Tuning Overview
+
+- **Model Name**: ", config$FullName, " (`", config$Code, "`)
+- **Learner ID**: `", config$LearnerID, "`
+- **Description**: ", config$Description, "
+- **Tuning Method**: Random Search
+- **Resampling Strategy**: ", tuning_instance$resampling$id, " (", tuning_instance$resampling$param_set$values$folds, " folds)
+- **Performance Metric**: ", tuning_instance$measure$id, "
+
+# 2. Tuning Results
+
+## Best Performance
+
+The best cross-validation performance achieved was **", round(tuning_summary$best_performance, 4), "** (`", tuning_instance$measure$id, "`).
+
+## Best Hyperparameters
+
+```{r best-params}
+if (length(tuning_summary$best_params) > 0) {
+  params_df <- data.frame(
+    parameter = names(tuning_summary$best_params),
+    value = unlist(lapply(tuning_summary$best_params, toString))
+  )
+  knitr::kable(params_df, row.names = FALSE)
+} else {
+  cat('No hyperparameters were tuned for this model.')
+}
+```
+
+## Tuning Process Visualization
+
+```{r tuning-plot}
+tryCatch({
+    plot_obj <- mlr3viz::autoplot(tuning_instance, type = 'parameter')
+    print(plot_obj)
+}, error = function(e) {
+    cat('Tuning plot could not be generated.')
+})
+```
+
+",
+if (!is.null(shap_plots)) {
+  "
+# 3. Model Interpretation (SHAP Analysis)
+
+*SHAP (SHapley Additive exPlanations) values show the contribution of each feature to the model's prediction for each sample.*
+
+## Feature Importance
+
+```{r shap-importance, fig.width=8, fig.height=6}
+print(shap_plots$importance)
+```
+
+## Bee Swarm Plot
+
+```{r shap-beeswarm, fig.width=8, fig.height=6}
+print(shap_plots$beeswarm)
+```
+
+## Dependence Plots
+
+```{r shap-dependence, fig.width=10, fig.height=8}
+print(shap_plots$dependence)
+```
+"
+} else {
+  "
+# 3. Model Interpretation (SHAP Analysis)
+
+*SHAP plots could not be generated for this model and data.*
+"
+},
+"
+---
+<p style=\"text-align: center; color: grey;\"><em>Report generated by autoMLR on: `", Sys.time(), "`</em></p>
+")
+
+  # Write and render the RMarkdown file
+  writeLines(rmd_content, report_path_rmd)
+
+  message("Rendering HTML report...")
+  tryCatch({
+    rmarkdown::render(
+      input = report_path_rmd,
+      output_file = report_path_html,
+      quiet = TRUE,
+      envir = new.env(parent = globalenv()) # Render in a clean environment to avoid conflicts
+    )
+    message(paste0("✔ Training report saved to: ", normalizePath(report_path_html)))
+  }, error = function(e) {
+    warning("Failed to render HTML report: ", e$message)
+    warning(paste0("The Rmd file that failed to render is located at: ", report_path_rmd))
+  })
+
+  return(invisible(report_path_html))
 }
 
 
@@ -59,13 +190,16 @@ generate_training_report <- function(config, tuning_summary, output_dir) {
 #' @return Invisibly returns NULL. Called for its side effect of writing files.
 #' @export
 save_final_artifacts <- function(final_learner, tuning_instance, output_dir, model_code) {
-  # ... (The rest of the function code remains the same as before)
   if (!dir.exists(output_dir)) {
     dir.create(output_dir, recursive = TRUE)
   }
+
   model_file <- file.path(output_dir, paste0(model_code, "_final_model.rds"))
   saveRDS(final_learner, file = model_file)
+
   instance_file <- file.path(output_dir, paste0(model_code, "_tuning_instance.rds"))
   saveRDS(tuning_instance, file = instance_file)
-  message("Final model and tuning instance saved to: ", normalizePath(output_dir))
+
+  message(paste0("Final model and tuning instance saved to: ", normalizePath(output_dir)))
 }
+

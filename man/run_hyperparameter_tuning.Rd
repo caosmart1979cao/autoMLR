@@ -9,11 +9,12 @@ run_hyperparameter_tuning(
   learner,
   search_space,
   n_evals = 20,
-  cv_folds = 5
+  cv_folds = 5,
+  measure = NULL
 )
 }
 \arguments{
-\item{task}{The \code{mlr3} classification task.}
+\item{task}{The \code{mlr3} task (e.g., TaskClassif, TaskRegr, TaskSurv).}
 
 \item{learner}{The \code{mlr3} learner object.}
 
@@ -22,6 +23,9 @@ run_hyperparameter_tuning(
 \item{n_evals}{The number of iterations for random search.}
 
 \item{cv_folds}{The number of folds for cross-validation.}
+
+\item{measure}{An optional \code{mlr3::Measure} object to use for optimization.
+If NULL, a default is chosen based on the task type (AUC for classif, RMSE for regr, C-index for surv).}
 }
 \value{
 A finished \code{mlr3tuning::TuningInstanceBatchSingleCrit} object containing all results.
@@ -29,4 +33,6 @@ A finished \code{mlr3tuning::TuningInstanceBatchSingleCrit} object containing al
 \description{
 The core tuning engine. It bundles a task, learner, and search space to find
 the optimal hyperparameters using random search and cross-validation.
+The evaluation measure is dynamically selected based on the task type,
+unless specified otherwise.
 }

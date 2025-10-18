@@ -1,8 +1,8 @@
 ---
-title: "Getting Started with autoMLR"
+title: "Getting Started with autoMLR v2.0"
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Getting Started with autoMLR}
+  %\VignetteIndexEntry{Getting Started with autoMLR v2.0}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
@@ -10,109 +10,130 @@ vignette: >
 ```{r, include = FALSE}
 knitr::opts_chunk$set(
   collapse = TRUE,
-  comment = "#>"
+  comment = "#>",
+  fig.width = 8,
+  fig.height = 6
 )
 ```
 
-## Introduction
+# Introduction to autoMLR v2.0
 
-Welcome to `autoMLR`! This guide will walk you through a complete, end-to-end workflow for automated machine learning model tuning. We will go from selecting a model to training a final, optimized version and generating a report.
+Welcome to the new era of `autoMLR`! This guide demonstrates the complete, end-to-end v2.0 workflow. We will go from exploring a universe of models to orchestrating a multi-model benchmark competition, and finally generating a rich, interactive report with deep model insights (SHAP analysis) for the champion model.
 
-First, let's load all of our package's functions.
+First, let's load our entire orchestra of functions.
 ```{r setup}
 # During development, this command loads all functions from the R/ directory,
 # just as if the package were installed and loaded with library(autoMLR).
 if (require("devtools", quietly = TRUE)) {
   devtools::load_all()
 }
+# Set a seed for reproducibility across the entire workflow
+set.seed(2025)
 ```
 
-## Step 1: The Model Registry (Central Console)
+# Step 1: The Universe of Models
 
-Our journey begins at the central console, where we can see all available models.
+Our journey begins at the central console, where our universe of models has significantly expanded. We can now see models for classification, regression, and survival analysis.
+
 ```{r registry}
-# Load the registry
+# Load the expanded model registry
 registry <- load_model_registry()
 
-# List all available models
-list_available_models(registry)
-
-# Let's choose the Decision Tree ("DT") for this example
-model_code <- "DT"
-dt_config <- get_model_config(registry, model_code)
+# List all available models to see our new capabilities
+print(registry[, c("Code", "FullName", "Category", "TaskType")])
 ```
 
-## Step 2: The Learner Factory
+# Step 2: Defining the Mission (The Task)
 
-With a configuration in hand, we can now "manufacture" our learner and define its hyperparameter search space.
-```{r factory}
-dt_learner <- create_learner(dt_config)
-dt_space <- define_search_space(dt_config)
+For this demonstration, we will undertake a classification mission using the `mlr3` built-in `pima` dataset. The goal is to predict diabetes. Our v2.0 architecture can now seamlessly handle `"regr"` (regression) and `"surv"` (survival) tasks as well.
 
-print(dt_learner)
-print(dt_space)
-```
-
-## Step 3: The Tuning Engine
-
-This is the core of our package. We provide the engine with a task, our learner, and the search space, and it finds the best parameters for us. We'll use the `mlr3` built-in `pima` dataset for this demonstration.
-```{r tuning}
-# Ensure necessary packages are available
-if (!require("mlr3learners", quietly = TRUE)) install.packages("mlr3learners")
-if (!require("mlr3tuning", quietly = TRUE)) install.packages("mlr3tuning")
-if (!require("mlr3data", quietly = TRUE)) install.packages("mlr3data")
-
-
+```{r task}
 # Load the task
 task <- mlr3::tsk("pima")
 
-# Set a seed for reproducibility
-set.seed(2025) 
+# Let's split the data for a final hold-out evaluation for our report
+split <- mlr3::partition(task, ratio = 0.8)
+train_task <- task$clone()$filter(split$train)
+test_task <- task$clone()$filter(split$test)
+```
 
-# Run a small-scale tuning for demonstration
-tuning_instance <- run_hyperparameter_tuning(
-  task = task,
-  learner = dt_learner,
-  search_space = dt_space,
-  n_evals = 10, # 10 evaluations
-  cv_folds = 3  # 3-fold cross-validation
+# Step 3: The Symphony (Multi-Model Benchmark)
+
+Instead of tuning one model, we will now conduct a symphony. We'll select a few contenders and have them compete in a benchmark. `autoMLR` will automatically handle hyperparameter tuning for each tunable model internally before the final comparison.
+
+```{r benchmark-run}
+# Select our contenders for the benchmark
+models_to_compare <- c("DT", "RF", "LR", "XGB") # Decision Tree, Random Forest, Logistic Regression, XGBoost
+
+# Define the outer resampling strategy for the benchmark comparison
+# This is how we will judge the final tuned models against each other
+outer_resampling <- mlr3::rsmp("cv", folds = 3)
+
+# Launch the benchmark!
+# This single command runs the entire competition.
+benchmark_result <- run_model_benchmark(
+  task = train_task,
+  model_codes = models_to_compare,
+  registry = registry,
+  n_evals = 10, # Inner tuning evaluations for each model
+  inner_cv_folds = 3,
+  outer_resampling = outer_resampling
+)
+```
+
+# Step 4: The Performance Review
+
+The competition is over. Let's see the results and crown a champion.
+
+```{r benchmark-results}
+# Get the aggregated performance table
+# The 'task_id' and 'learner_id' columns show our models
+# The final column shows the performance on our chosen metric (classif.auc by default)
+benchmark_result$aggregate()
+
+# Visualize the comparison with a boxplot
+plot_benchmark_summary(benchmark_result)
+```
+
+# Step 5: Crowning the Champion & Final Report
+
+From the results, let's assume `XGB` (XGBoost) is our champion. We will now take this best-performing model, train it on the full training data, and generate our grand finale: a comprehensive, interactive HTML report that includes SHAP analysis for full interpretability.
+
+```{r final-report}
+# Programmatically find the best learner's code
+aggregated_results <- benchmark_result$aggregate()
+best_learner_code <- aggregated_results[which.max(aggregated_results$classif.auc)]$learner_id
+
+cat("The champion model is:", best_learner_code, "\n")
+
+# --- Final Training ---
+# Get the trained AutoTuner for our champion
+best_autotuner <- benchmark_result$resample_result(learner_id = best_learner_code)$learners[[1]]
+
+# The AutoTuner already contains the best hyperparameter configuration found during the benchmark.
+# We now train this fully configured learner on the entire training set.
+best_autotuner$train(train_task)
+
+# --- Generate the Grand Report ---
+# Create an output directory for our artifacts
+output_dir <- tempfile()
+
+# The report needs the test set features for SHAP analysis
+test_data_features <- test_task$data(cols = test_task$feature_names)
+
+# Generate the rich HTML report
+generate_training_report(
+  config = get_model_config(registry, best_learner_code),
+  tuning_instance = best_autotuner$tuning_instance,
+  final_learner = best_autotuner,
+  task = train_task,
+  test_data = test_data_features,
+  output_dir = output_dir
 )
 
-# Show the best result found
-print(tuning_instance$result)
-```
-
-## Step 4: The Insight Hub
-
-The engine has finished its work. Now, let's analyze and visualize the results to understand what happened.
-```{r insights}
-# Summarize the results
-tuning_summary <- summarize_tuning_results(tuning_instance)
-
-# Print the best AUC score
-cat("Best AUC found:", round(tuning_summary$best_performance[[1]], 4), "\n")
-
-# Visualize the relationship between parameters and performance
-# This plot will appear in the output
-plot_tuning_summary(tuning_instance, type = "parameter")
-```
-
-## Step 5: Final Delivery
-
-Finally, we use the best hyperparameters to train a final model on the entire dataset and generate a complete report.
-```{r finalization}
-# Create an output directory
-output_dir <- tempfile() # Use a temporary directory for this example
-
-# Train the final model
-final_model <- train_final_model(dt_learner, task, tuning_summary$best_params)
-print(final_model)
-
-# Generate the report and save artifacts
-generate_training_report(dt_config, tuning_summary, output_dir)
-save_final_artifacts(final_model, tuning_instance, output_dir, model_code)
-
-# We can see the files that were created
+# The report and other artifacts are saved in the output directory
+cat("\nAll artifacts, including the HTML report, are saved in:", output_dir, "\n")
 list.files(output_dir)
 ```
-This concludes our quick start guide. You have successfully tuned a model and produced all the necessary outputs for a reproducible machine learning project!
+
+This concludes our journey through `autoMLR` v2.0. You have successfully orchestrated a complete, automated, and interpretable machine learning competition, from model selection to a final, shareable report, all within a few powerful commands.

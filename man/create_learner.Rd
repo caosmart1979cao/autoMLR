@@ -14,5 +14,6 @@ An mlr3 \code{Learner} object.
 }
 \description{
 Dynamically creates an mlr3 learner object based on a model configuration.
-The predict type is automatically set to "prob" to enable AUC calculation.
+The predict type is automatically set to "prob" for classification learners
+to enable AUC calculation with the default measure.
 }

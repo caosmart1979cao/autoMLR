@@ -2,20 +2,34 @@
 % Please edit documentation in R/05_final_training.R
 \name{generate_training_report}
 \alias{generate_training_report}
-\title{Generate a training report}
+\title{Generate a rich, dynamic HTML training report}
 \usage{
-generate_training_report(config, tuning_summary, output_dir)
+generate_training_report(
+  config,
+  tuning_instance,
+  final_learner,
+  task,
+  test_data,
+  output_dir
+)
 }
 \arguments{
 \item{config}{The model configuration list.}
 
-\item{tuning_summary}{The summary list from \code{summarize_tuning_results()}.}
+\item{tuning_instance}{The finished tuning instance.}
+
+\item{final_learner}{The final trained learner.}
+
+\item{task}{The mlr3 task.}
+
+\item{test_data}{A \code{data.frame} of the test set (features only), required for SHAP plots.}
 
 \item{output_dir}{The directory to save the report in.}
 }
 \value{
-Invisibly returns NULL. Called for its side effect of writing a file.
+Invisibly returns the path to the generated report.
 }
 \description{
-Creates a text file summarizing the entire training and tuning process.
+Creates a comprehensive HTML file summarizing the entire training and tuning process,
+including performance metrics and SHAP model interpretation plots.
 }

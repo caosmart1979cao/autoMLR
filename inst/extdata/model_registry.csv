@@ -1,11 +1,13 @@
-Code,FullName,LearnerID,Category,Description,Tunable
-DT,"Decision Tree",classif.rpart,Tree-based,"CART decision tree",TRUE
-RF,"Random Forest",classif.ranger,Ensemble,"Random Forest from ranger package",TRUE
-XGB,"XGBoost",classif.xgboost,Boosting,"Extreme Gradient Boosting",TRUE
-SVM,"Support Vector Machine",classif.svm,SVM,"Support Vector Machine from e1071",TRUE
-GLMNET,"Elastic Net",classif.glmnet,Regularized,"Elastic Net Regularization",TRUE
-LR,"Logistic Regression",classif.log_reg,Linear,"Logistic Regression",FALSE
-LGBM,"LightGBM",classif.lightgbm,Boosting,"Light Gradient Boosting Machine",TRUE
-LASSO,"Lasso Regression",classif.glmnet,Regularized,"L1 Regularization",TRUE
-RIDGE,"Ridge Regression",classif.glmnet,Regularized,"L2 Regularization",TRUE
-GAMBOOST,"GAM Boosting",classif.gamboost,Boosting,"Boosting with GAMs",TRUE
+Code,FullName,LearnerID,Category,TaskType,Tunable,Description
+DT,"Decision Tree",classif.rpart,Tree-based,"classif, regr",TRUE,"CART decision tree for classification/regression."
+RF,"Random Forest",classif.ranger,Ensemble,"classif, regr, surv",TRUE,"Fast Random Forest implementation from ranger package."
+XGB,"XGBoost",classif.xgboost,Boosting,"classif, regr, surv",TRUE,"Extreme Gradient Boosting, a powerful and popular boosting algorithm."
+SVM,"Support Vector Machine",classif.ksvm,SVM,"classif, regr",TRUE,"Kernel Support Vector Machine, effective for high-dimensional spaces."
+GLMNET,"Elastic Net",classif.glmnet,Regularized,"classif, regr",TRUE,"Regularized Generalized Linear Models mixing L1 and L2 penalties."
+LR,"Logistic Regression",classif.log_reg,Linear,classif,FALSE,"Classic linear model for binary or multinomial classification."
+LGBM,"LightGBM",classif.lightgbm,Boosting,"classif, regr",TRUE,"High-performance gradient boosting framework based on decision trees."
+CPH,"Cox Proportional Hazards",surv.coxph,Survival,surv,TRUE,"The standard semi-parametric model for survival analysis."
+SURV_RF,"Survival Forest",surv.ranger,Survival,surv,TRUE,"Random Forest adapted for survival data, using ranger."
+GBM,"Gradient Boosting Machine",classif.gbm,Boosting,"classif, regr",TRUE,"Classic Gradient Boosting Machine for classification and regression."
+NNET,"Neural Network",classif.nnet,Neural Net,"classif, regr",TRUE,"Single-hidden-layer neural network for basic deep learning tasks."
+LDA,"Linear Discriminant Analysis",classif.lda,Discriminant,classif,FALSE,"Linear discriminant analysis for classification and dimensionality reduction."
